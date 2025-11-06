@@ -1,20 +1,150 @@
-import jwt from 'jsonwebtoken';
-import User from '../models/User.js';
+import jwt from "jsonwebtoken";
+import { OAuth2Client } from "google-auth-library";
+import fetch from "node-fetch";
+import path from "path";
+import fs from "fs";
+import User from "../models/User.js";
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE || '7d'
+    expiresIn: process.env.JWT_EXPIRE || "7d",
   });
 };
 
-export const register = async (req, res) => {
-  try {
-    const { name, email, password, age, location } = req.body;
+// Add this after your imports
+const allInterests = [
+  "coffee",
+  "clubbing",
+  "travel",
+  "movies",
+  "gaming",
+  "serious-relationship",
+  "fitness",
+  "music",
+  "food",
+];
 
+export const register = async (req, res) => {
+  console.log("Register controller - req.file:", req.file);
+  console.log("Register controller - req.body keys:", Object.keys(req.body));
+
+  try {
+    // Handle multipart form data
+    const {
+      fullName: name,
+      email,
+      password,
+      birthDate,
+      age,
+      location,
+      gender,
+      interestedIn,
+      relationshipType,
+      bio,
+      phoneNumber,
+      agreeToTerms,
+      selectedInterests,
+    } = req.body;
+
+    // Log all received data for debugging
+    console.log("Received registration data:");
+    Object.keys(req.body).forEach((key) => {
+      if (key !== "password") {
+        console.log(`${key}:`, req.body[key]);
+      } else {
+        console.log(`${key}:`, "***");
+      }
+    });
+
+    // FIX: Parse selectedInterests properly
+    let selectedInterestsArray = [];
+
+    if (req.body.selectedInterests) {
+      try {
+        // If it's a string, split by commas and clean up
+        if (typeof req.body.selectedInterests === "string") {
+          selectedInterestsArray = req.body.selectedInterests
+            .split(",")
+            .map((interest) => interest.trim())
+            .filter(
+              (interest) => interest !== "" && allInterests.includes(interest)
+            );
+        }
+        // If it's already an array, use it directly
+        else if (Array.isArray(req.body.selectedInterests)) {
+          selectedInterestsArray = req.body.selectedInterests.filter(
+            (interest) => interest !== "" && allInterests.includes(interest)
+          );
+        }
+
+        // Validate max 4 interests
+        if (selectedInterestsArray.length > 4) {
+          return res.status(400).json({
+            success: false,
+            message: "Cannot select more than 4 interests",
+          });
+        }
+
+        console.log("Parsed selectedInterests:", selectedInterestsArray);
+      } catch (error) {
+        console.log("Error parsing selectedInterests:", error);
+        console.log("Raw selectedInterests data:", req.body.selectedInterests);
+      }
+    }
+
+    // For backward compatibility, also check the old interests field
+    let interests = [];
+    if (req.body.interests && selectedInterestsArray.length === 0) {
+      try {
+        if (typeof req.body.interests === "string") {
+          interests = req.body.interests
+            .split(",")
+            .filter((interest) => interest.trim() !== "");
+        } else if (Array.isArray(req.body.interests)) {
+          interests = req.body.interests;
+        }
+        console.log("Parsed interests (legacy):", interests);
+      } catch (error) {
+        console.log("Error parsing interests:", error);
+      }
+    }
+
+    // Use selectedInterests if available, otherwise fall back to interests
+    const finalInterests =
+      selectedInterestsArray.length > 0 ? selectedInterestsArray : interests;
+
+    console.log("Final interests to save:", finalInterests);
+
+    // Validation
     if (!name || !email || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide name, email and password'
+        message: "Please provide name, email and password",
+      });
+    }
+
+    if (!agreeToTerms || agreeToTerms === "false") {
+      return res.status(400).json({
+        success: false,
+        message: "You must agree to the terms and conditions",
+      });
+    }
+
+    // Validate interests
+    if (finalInterests.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Please select at least one interest",
+      });
+    }
+
+    // Validate max interests (double check)
+    if (finalInterests.length > 4) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot select more than 4 interests",
       });
     }
 
@@ -23,24 +153,58 @@ export const register = async (req, res) => {
     if (userExists) {
       return res.status(400).json({
         success: false,
-        message: 'User already exists with this email'
+        message: "User already exists with this email",
       });
     }
 
-    const user = await User.create({
+    // Handle profile photo upload
+    let avatar =
+      "https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&w=150";
+
+    if (req.file) {
+      avatar = `/uploads/avatars/${req.file.filename}`;
+    }
+
+    // FIX: Create user object with properly formatted interests
+    const userData = {
       name,
       email,
       password,
-      age,
-      location
+      age: parseInt(age) || calculateAge(birthDate),
+      location,
+      gender,
+      interestedIn,
+      relationshipType,
+      bio,
+      phoneNumber,
+      interests: finalInterests, // Keep for backward compatibility
+      selectedInterests: finalInterests, // Use the same array for both
+      avatar,
+      lookingFor: relationshipType || "",
+    };
+
+    console.log("Creating user with data:", {
+      ...userData,
+      password: "***",
+      selectedInterests: finalInterests,
     });
+
+    // In your register controller, before creating the user:
+    if (finalInterests.length > 4) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot select more than 4 interests",
+      });
+    }
+
+    const user = await User.create(userData);
 
     if (user) {
       const token = generateToken(user._id);
 
       res.status(201).json({
         success: true,
-        message: 'User registered successfully',
+        message: "User registered successfully",
         token,
         user: {
           id: user._id,
@@ -49,22 +213,55 @@ export const register = async (req, res) => {
           age: user.age,
           location: user.location,
           avatar: user.avatar,
-          interests: user.interests || []
-        }
+          bio: user.bio,
+          interests: user.interests,
+          selectedInterests: user.selectedInterests,
+          gender: user.gender,
+          interestedIn: user.interestedIn,
+          relationshipType: user.relationshipType,
+          phoneNumber: user.phoneNumber,
+          lookingFor: user.lookingFor,
+          isEmailVerified: user.isEmailVerified,
+          googleId: user.googleId,
+          facebookId: user.facebookId,
+          createdAt: user.createdAt,
+        },
       });
     } else {
       res.status(400).json({
         success: false,
-        message: 'Invalid user data'
+        message: "Invalid user data",
       });
     }
   } catch (error) {
-    console.error('Register error:', error);
+    console.error("Register controller error:", error);
+
+    // Handle Mongoose validation errors specifically
+    if (error.name === "ValidationError") {
+      const errors = Object.values(error.errors).map((err) => err.message);
+      return res.status(400).json({
+        success: false,
+        message: errors.join(", "),
+      });
+    }
+
     res.status(500).json({
       success: false,
-      message: error.message || 'Server error during registration'
+      message: error.message || "Server error during registration",
     });
   }
+};
+
+// Helper function to calculate age from birth date
+const calculateAge = (birthDate) => {
+  const today = new Date();
+  const birth = new Date(birthDate);
+  let age = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age;
 };
 
 export const login = async (req, res) => {
@@ -74,16 +271,16 @@ export const login = async (req, res) => {
     if (!email || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide email and password'
+        message: "Please provide email and password",
       });
     }
 
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({ email }).select("+password");
 
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials'
+        message: "Invalid credentials",
       });
     }
 
@@ -92,7 +289,7 @@ export const login = async (req, res) => {
     if (!isPasswordMatch) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials'
+        message: "Invalid credentials",
       });
     }
 
@@ -100,7 +297,7 @@ export const login = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Login successful',
+      message: "Login successful",
       token,
       user: {
         id: user._id,
@@ -109,14 +306,207 @@ export const login = async (req, res) => {
         age: user.age,
         location: user.location,
         avatar: user.avatar,
-        interests: user.interests || []
-      }
+        interests: user.interests || [],
+      },
     });
   } catch (error) {
-    console.error('Login error:', error);
+    console.error("Login error:", error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Server error during login'
+      message: error.message || "Server error during login",
+    });
+  }
+};
+
+export const googleAuth = async (req, res) => {
+  try {
+    const { tokenId } = req.body;
+
+    if (!tokenId) {
+      return res.status(400).json({
+        success: false,
+        message: "Google token is required",
+      });
+    }
+
+    // Verify Google token
+    const ticket = await googleClient.verifyIdToken({
+      idToken: tokenId,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    const { sub: googleId, email, name, picture } = payload;
+
+    // Check if user exists
+    let user = await User.findOne({
+      $or: [{ email: email }, { googleId: googleId }],
+    });
+
+    if (user) {
+      // Update Google ID if not set
+      if (!user.googleId) {
+        user.googleId = googleId;
+        await user.save();
+      }
+    } else {
+      // Create new user
+      user = await User.create({
+        name,
+        email,
+        googleId,
+        avatar: picture || user.avatar,
+        password: "google-auth-" + Date.now(), // Dummy password
+        isEmailVerified: true,
+      });
+    }
+
+    const token = generateToken(user._id);
+
+    res.status(200).json({
+      success: true,
+      message: "Google authentication successful",
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        age: user.age,
+        location: user.location,
+        avatar: user.avatar,
+        bio: user.bio,
+        interests: user.interests || [],
+      },
+    });
+  } catch (error) {
+    console.error("Google auth error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Google authentication failed",
+    });
+  }
+};
+
+export const facebookAuth = async (req, res) => {
+  try {
+    const { accessToken } = req.body;
+
+    if (!accessToken) {
+      return res.status(400).json({
+        success: false,
+        message: "Facebook access token is required",
+      });
+    }
+
+    // Verify Facebook token and get user info
+    const response = await fetch(
+      `https://graph.facebook.com/me?fields=id,name,email,picture&access_token=${accessToken}`
+    );
+    const facebookUser = await response.json();
+
+    if (facebookUser.error) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Facebook token",
+      });
+    }
+
+    const { id: facebookId, email, name, picture } = facebookUser;
+
+    // Check if user exists
+    let user = await User.findOne({
+      $or: [{ email: email }, { facebookId: facebookId }],
+    });
+
+    if (user) {
+      // Update Facebook ID if not set
+      if (!user.facebookId) {
+        user.facebookId = facebookId;
+        await user.save();
+      }
+    } else {
+      // Create new user
+      user = await User.create({
+        name,
+        email: email || `facebook_${facebookId}@example.com`, // Fallback email
+        facebookId,
+        avatar: picture?.data?.url || user.avatar,
+        password: "facebook-auth-" + Date.now(), // Dummy password
+        isEmailVerified: true,
+      });
+    }
+
+    const token = generateToken(user._id);
+
+    res.status(200).json({
+      success: true,
+      message: "Facebook authentication successful",
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        age: user.age,
+        location: user.location,
+        avatar: user.avatar,
+        bio: user.bio,
+        interests: user.interests || [],
+      },
+    });
+  } catch (error) {
+    console.error("Facebook auth error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Facebook authentication failed",
+    });
+  }
+};
+
+export const uploadAvatar = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "No file uploaded",
+      });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Delete old avatar if it exists and is not default
+    if (user.avatar && !user.avatar.includes("pexels.com")) {
+      const oldAvatarPath = path.join(
+        process.cwd(),
+        "uploads",
+        "avatars",
+        path.basename(user.avatar)
+      );
+      if (fs.existsSync(oldAvatarPath)) {
+        fs.unlinkSync(oldAvatarPath);
+      }
+    }
+
+    // Update user avatar
+    const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+    user.avatar = avatarUrl;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Avatar uploaded successfully",
+      avatarUrl,
+    });
+  } catch (error) {
+    console.error("Upload avatar error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Avatar upload failed",
     });
   }
 };
@@ -128,7 +518,7 @@ export const getProfile = async (req, res) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: "User not found",
       });
     }
 
@@ -143,61 +533,97 @@ export const getProfile = async (req, res) => {
         avatar: user.avatar,
         bio: user.bio,
         interests: user.interests,
+        gender: user.gender, // Added
+        interestedIn: user.interestedIn, // Added
+        relationshipType: user.relationshipType, // Added
+        phoneNumber: user.phoneNumber, // Added
         lookingFor: user.lookingFor,
-        createdAt: user.createdAt
-      }
+        isEmailVerified: user.isEmailVerified, // Added
+        googleId: user.googleId, // Added
+        facebookId: user.facebookId, // Added
+        createdAt: user.createdAt,
+      },
     });
   } catch (error) {
-    console.error('Get profile error:', error);
+    console.error("Get profile error:", error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Server error'
+      message: error.message || "Server error",
     });
   }
 };
 
 export const updateProfile = async (req, res) => {
   try {
-    const { name, age, location, bio, interests, lookingFor } = req.body;
+    // Parse selectedInterests if it's a string
+    if (
+      req.body.selectedInterests &&
+      typeof req.body.selectedInterests === "string"
+    ) {
+      req.body.selectedInterests = req.body.selectedInterests
+        .split(",")
+        .filter((interest) => interest.trim() !== "");
+    }
 
-    const user = await User.findById(req.user.id);
+    // Validate interests count
+    if (req.body.selectedInterests && req.body.selectedInterests.length > 4) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot select more than 4 interests",
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      { $set: req.body },
+      { new: true, runValidators: true }
+    );
 
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: "User not found",
       });
     }
 
-    user.name = name || user.name;
-    user.age = age || user.age;
-    user.location = location || user.location;
-    user.bio = bio || user.bio;
-    user.interests = interests || user.interests;
-    user.lookingFor = lookingFor || user.lookingFor;
-
-    const updatedUser = await user.save();
-
     res.status(200).json({
       success: true,
-      message: 'Profile updated successfully',
       user: {
-        id: updatedUser._id,
-        name: updatedUser.name,
-        email: updatedUser.email,
-        age: updatedUser.age,
-        location: updatedUser.location,
-        avatar: updatedUser.avatar,
-        bio: updatedUser.bio,
-        interests: updatedUser.interests,
-        lookingFor: updatedUser.lookingFor
-      }
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        age: user.age,
+        location: user.location,
+        avatar: user.avatar,
+        bio: user.bio,
+        interests: user.interests,
+        selectedInterests: user.selectedInterests, 
+        gender: user.gender,
+        interestedIn: user.interestedIn,
+        relationshipType: user.relationshipType,
+        phoneNumber: user.phoneNumber,
+        lookingFor: user.lookingFor,
+        isEmailVerified: user.isEmailVerified,
+        googleId: user.googleId,
+        facebookId: user.facebookId,
+        createdAt: user.createdAt,
+      },
     });
   } catch (error) {
-    console.error('Update profile error:', error);
+    console.error("Update profile error:", error);
+
+    // Handle validation errors
+    if (error.name === "ValidationError") {
+      const errors = Object.values(error.errors).map((err) => err.message);
+      return res.status(400).json({
+        success: false,
+        message: errors.join(", "),
+      });
+    }
+
     res.status(500).json({
       success: false,
-      message: error.message || 'Server error'
+      message: error.message || "Server error",
     });
   }
 };
