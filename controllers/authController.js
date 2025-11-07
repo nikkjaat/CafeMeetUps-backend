@@ -1,11 +1,9 @@
 import jwt from "jsonwebtoken";
-import { OAuth2Client } from "google-auth-library";
 import fetch from "node-fetch";
 import path from "path";
 import fs from "fs";
 import User from "../models/User.js";
-
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+import admin from "../config/firebase.js";
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -329,34 +327,25 @@ export const googleAuth = async (req, res) => {
       });
     }
 
-    // Verify Google token
-    const ticket = await googleClient.verifyIdToken({
-      idToken: tokenId,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
+    const decodedToken = await admin.auth().verifyIdToken(tokenId);
+    const { uid: googleId, email, name, picture } = decodedToken;
 
-    const payload = ticket.getPayload();
-    const { sub: googleId, email, name, picture } = payload;
-
-    // Check if user exists
     let user = await User.findOne({
       $or: [{ email: email }, { googleId: googleId }],
     });
 
     if (user) {
-      // Update Google ID if not set
       if (!user.googleId) {
         user.googleId = googleId;
         await user.save();
       }
     } else {
-      // Create new user
       user = await User.create({
         name,
         email,
         googleId,
-        avatar: picture || user.avatar,
-        password: "google-auth-" + Date.now(), // Dummy password
+        avatar: picture,
+        password: "google-auth-" + Date.now(),
         isEmailVerified: true,
       });
     }
@@ -389,49 +378,34 @@ export const googleAuth = async (req, res) => {
 
 export const facebookAuth = async (req, res) => {
   try {
-    const { accessToken } = req.body;
+    const { tokenId } = req.body;
 
-    if (!accessToken) {
+    if (!tokenId) {
       return res.status(400).json({
         success: false,
-        message: "Facebook access token is required",
+        message: "Facebook token is required",
       });
     }
 
-    // Verify Facebook token and get user info
-    const response = await fetch(
-      `https://graph.facebook.com/me?fields=id,name,email,picture&access_token=${accessToken}`
-    );
-    const facebookUser = await response.json();
+    const decodedToken = await admin.auth().verifyIdToken(tokenId);
+    const { uid: facebookId, email, name, picture } = decodedToken;
 
-    if (facebookUser.error) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid Facebook token",
-      });
-    }
-
-    const { id: facebookId, email, name, picture } = facebookUser;
-
-    // Check if user exists
     let user = await User.findOne({
       $or: [{ email: email }, { facebookId: facebookId }],
     });
 
     if (user) {
-      // Update Facebook ID if not set
       if (!user.facebookId) {
         user.facebookId = facebookId;
         await user.save();
       }
     } else {
-      // Create new user
       user = await User.create({
         name,
-        email: email || `facebook_${facebookId}@example.com`, // Fallback email
+        email: email || `facebook_${facebookId}@example.com`,
         facebookId,
-        avatar: picture?.data?.url || user.avatar,
-        password: "facebook-auth-" + Date.now(), // Dummy password
+        avatar: picture,
+        password: "facebook-auth-" + Date.now(),
         isEmailVerified: true,
       });
     }
@@ -597,7 +571,7 @@ export const updateProfile = async (req, res) => {
         avatar: user.avatar,
         bio: user.bio,
         interests: user.interests,
-        selectedInterests: user.selectedInterests, 
+        selectedInterests: user.selectedInterests,
         gender: user.gender,
         interestedIn: user.interestedIn,
         relationshipType: user.relationshipType,

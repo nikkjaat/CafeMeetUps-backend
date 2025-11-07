@@ -118,6 +118,7 @@ const userSchema = new mongoose.Schema(
         "marriage",
         "friendship",
         "long-term",
+        "",
       ],
       default: "",
     },
