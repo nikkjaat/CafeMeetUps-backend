@@ -11,8 +11,8 @@ const app = express();
 // ✅ Allow frontend domain explicitly
 const allowedOrigins = [
   process.env.FRONTEND_URL,
-  "https://www.cafemeetups.com/", // production
-  "https://cafe-meet-ups-frontend.vercel.app/", // vercel deployment
+  "https://www.cafemeetups.com", // production
+  "https://cafe-meet-ups-frontend.vercel.app", // vercel deployment
   "http://localhost:3000", // for local testing
 ];
 
