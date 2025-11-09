@@ -25,8 +25,7 @@ const allInterests = [
 ];
 
 export const register = async (req, res) => {
-  console.log("Register controller - req.file:", req.file);
-  console.log("Register controller - req.body keys:", Object.keys(req.body));
+  
 
   try {
     // Handle multipart form data
@@ -46,15 +45,6 @@ export const register = async (req, res) => {
       selectedInterests,
     } = req.body;
 
-    // Log all received data for debugging
-    console.log("Received registration data:");
-    Object.keys(req.body).forEach((key) => {
-      if (key !== "password") {
-        console.log(`${key}:`, req.body[key]);
-      } else {
-        console.log(`${key}:`, "***");
-      }
-    });
 
     // FIX: Parse selectedInterests properly
     let selectedInterestsArray = [];
@@ -85,7 +75,7 @@ export const register = async (req, res) => {
           });
         }
 
-        console.log("Parsed selectedInterests:", selectedInterestsArray);
+        
       } catch (error) {
         console.log("Error parsing selectedInterests:", error);
         console.log("Raw selectedInterests data:", req.body.selectedInterests);
@@ -113,7 +103,7 @@ export const register = async (req, res) => {
     const finalInterests =
       selectedInterestsArray.length > 0 ? selectedInterestsArray : interests;
 
-    console.log("Final interests to save:", finalInterests);
+    
 
     // Validation
     if (!name || !email || !password) {

@@ -108,6 +108,35 @@ const userSchema = new mongoose.Schema(
     phoneNumber: {
       type: String,
     },
+    preferences: {
+      ageMin: {
+        type: Number,
+        default: 18,
+        min: 18,
+        max: 100,
+      },
+      ageMax: {
+        type: Number,
+        default: 100,
+        min: 18,
+        max: 100,
+      },
+      distance: {
+        type: Number,
+        default: 50,
+        min: 1,
+        max: 100,
+      },
+      interests: [
+        {
+          type: String,
+        },
+      ],
+      relationshipType: {
+        type: String,
+        default: "",
+      },
+    },
     lookingFor: {
       type: String,
       enum: [
@@ -121,6 +150,29 @@ const userSchema = new mongoose.Schema(
         "",
       ],
       default: "",
+    },
+    likes: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+
+    matches: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+
+    isPremium: {
+      type: Boolean,
+      default: false,
+    },
+
+    superLikes: {
+      type: Number,
+      default: 0,
     },
     createdAt: {
       type: Date,

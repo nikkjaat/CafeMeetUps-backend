@@ -17,7 +17,6 @@ import path from "path";
 const uploadsDir = "uploads/avatars";
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
-  console.log("Created uploads directory:", uploadsDir);
 }
 
 // Configure multer for file uploads
@@ -38,18 +37,9 @@ const upload = multer({
     fileSize: 5 * 1024 * 1024, // 5MB limit
   },
   fileFilter: function (req, file, cb) {
-    console.log("Multer file filter - File received:", {
-      fieldname: file.fieldname,
-      originalname: file.originalname,
-      mimetype: file.mimetype,
-      size: file.size,
-    });
-
     if (file.mimetype.startsWith("image/")) {
-      console.log("File accepted");
       cb(null, true);
     } else {
-      console.log("File rejected - not an image");
       cb(new Error("Only image files are allowed!"), false);
     }
   },

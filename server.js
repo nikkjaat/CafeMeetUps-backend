@@ -3,6 +3,9 @@ import dotenv from "dotenv";
 import cors from "cors";
 import connectDatabase from "./config/database.js";
 import authRoutes from "./routes/authRoutes.js";
+import userRoutes from "./routes/userRoutes.js";
+import matchRoutes from "./routes/matchRoutes.js";
+// import messageRoutes from "./routes/messageRoutes.js";
 
 dotenv.config();
 
@@ -49,6 +52,9 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/matches", matchRoutes);
+// app.use("/api/messages", messageRoutes);
 
 // ✅ Global error handler
 app.use((err, req, res, next) => {
