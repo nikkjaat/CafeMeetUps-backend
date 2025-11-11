@@ -132,7 +132,7 @@ export const superLikeUser = async (req, res) => {
   }
 };
 
-// GET /api/matches - Get user's matches
+// controllers/matchController.js - Fix getMatches function
 export const getMatches = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -144,19 +144,30 @@ export const getMatches = async (req, res) => {
       .populate("users", "name age avatar location interests")
       .sort({ updatedAt: -1 });
 
+    console.log(`📊 Found ${matches.length} matches for user ${userId}`);
+
     // Format response with match details
     const formattedMatches = matches.map((match) => {
       const otherUser = match.users.find(
         (user) => user._id.toString() !== userId
       );
 
+      console.log(
+        `🎯 Formatting match ${match._id} with user:`,
+        otherUser?.name
+      );
+
       return {
-        matchId: match._id,
+        _id: match._id, // This is the crucial fix - add _id field
+        matchId: match._id, // For backward compatibility
         user: otherUser,
         lastMessage: match.lastMessage,
         matchedAt: match.createdAt,
+        messages: [], // Initialize empty messages array
       };
     });
+
+    console.log("✅ Formatted matches:", formattedMatches);
 
     res.json({
       success: true,

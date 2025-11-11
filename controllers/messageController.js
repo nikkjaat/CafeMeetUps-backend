@@ -118,18 +118,22 @@ export const getMessages = async (req, res) => {
     );
 
     // Format response for frontend
-    const formattedMessages = messages.map((msg) => ({
-      id: msg._id,
-      text: msg.messageText,
-      sender: msg.senderId._id.toString() === userId ? "user" : "match", // Convert to "user" or "match"
-      senderId: msg.senderId._id,
-      senderInfo: {
-        name: msg.senderId.name,
-        avatar: msg.senderId.avatar,
-      },
-      timestamp: msg.createdAt,
-      isRead: msg.isRead,
-    }));
+    const formattedMessages = messages.map((msg) => {
+      const isCurrentUser = msg.senderId._id.toString() === userId;
+
+      return {
+        id: msg._id,
+        text: msg.messageText,
+        sender: isCurrentUser ? "user" : "match", // Use "user" or "match"
+        senderId: msg.senderId._id,
+        senderInfo: {
+          name: msg.senderId.name,
+          avatar: msg.senderId.avatar,
+        },
+        timestamp: msg.createdAt,
+        isRead: msg.isRead,
+      };
+    });
 
     res.json({
       success: true,
