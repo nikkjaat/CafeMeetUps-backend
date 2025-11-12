@@ -157,6 +157,10 @@ const userSchema = new mongoose.Schema(
         ref: "User",
       },
     ],
+    likeCount: {
+      type: Number,
+      default: 0,
+    },
 
     matches: [
       {

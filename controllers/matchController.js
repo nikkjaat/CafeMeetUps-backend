@@ -4,19 +4,20 @@ import Match from "../models/Match.js";
 import Message from "../models/Message.js";
 
 // POST /api/like/:toUserId
+
 export const likeUser = async (req, res) => {
   try {
-    const fromUserId = req.user.id; // From auth middleware
+    const fromUserId = req.user.id;
     const toUserId = req.params.toUserId;
-
     console.log(fromUserId, toUserId);
 
-    // Validate users
+    // ---------- Prevent liking oneself ----------
+    
+
     if (fromUserId === toUserId) {
-      return res.status(400).json({
-        success: false,
-        message: "Cannot like yourself",
-      });
+      return res
+        .status(400)
+        .json({ success: false, message: "Cannot like yourself" });
     }
 
     const [fromUser, toUser] = await Promise.all([
@@ -25,36 +26,34 @@ export const likeUser = async (req, res) => {
     ]);
 
     if (!fromUser || !toUser) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
 
-    // Check if already liked
+    // ---------- Already liked? ----------
     if (fromUser.likes.includes(toUserId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Already liked this user",
-      });
+      return res.status(400).json({ success: false, message: "Already liked" });
     }
 
-    // Add to likes array
+    // ---------- Add like ----------
     fromUser.likes.push(toUserId);
     await fromUser.save();
 
-    // Check for mutual like (match)
+    // ---------- Increment likeCount on receiver ----------
+    await User.findByIdAndUpdate(toUserId, { $inc: { likeCount: 1 } });
+
+    // ---------- Check for mutual like ----------
     let isMatch = false;
     let match = null;
 
     if (toUser.likes.includes(fromUserId)) {
       isMatch = true;
 
-      // Create match
+      // Create Match document
       match = new Match({
         users: [fromUserId, toUserId],
       });
-
       await match.save();
 
       // Add to both users' matches array
@@ -67,21 +66,20 @@ export const likeUser = async (req, res) => {
         }),
       ]);
 
-      // Create welcome message
-      const welcomeMessage = new Message({
+      // System welcome message
+      const welcome = new Message({
         matchId: match._id,
-        senderId: "system", // Or use a system user
+        senderId: "system",
         receiverId: fromUserId,
-        messageText: `You matched with ${toUser.name}! Start the conversation.`,
+        messageText: `You matched with ${toUser.name}! Say hi!`,
       });
+      await welcome.save();
 
-      await welcomeMessage.save();
-
-      // Update match last message
+      // Update lastMessage on match
       match.lastMessage = {
-        text: welcomeMessage.messageText,
-        sender: welcomeMessage.senderId,
-        timestamp: welcomeMessage.createdAt,
+        text: welcome.messageText,
+        sender: "system",
+        timestamp: welcome.createdAt,
       };
       await match.save();
     }
@@ -94,10 +92,7 @@ export const likeUser = async (req, res) => {
     });
   } catch (error) {
     console.error("Like error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
