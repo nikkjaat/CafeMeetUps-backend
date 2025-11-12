@@ -15,7 +15,7 @@ router.post("/like/:toUserId", protect, likeUser);
 router.post("/super-like/:toUserId", protect, superLikeUser);
 router.get("/", protect, getMatches);
 
-// Message routes
+// Message routes updated
 router.post("/message", protect, sendMessage);
 router.get("/messages/:matchId", protect, getMessages);
 
