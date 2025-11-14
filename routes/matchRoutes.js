@@ -16,7 +16,7 @@ router.post("/super-like/:toUserId", protect, superLikeUser);
 router.get("/", protect, getMatches);
 
 // Message routes updated
-router.post("/message", protect, sendMessage);
+router.post("/messages", protect, sendMessage);
 router.get("/messages/:matchId", protect, getMessages);
 
 export default router;
